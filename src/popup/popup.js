@@ -27,35 +27,8 @@ import { FEATURE_FLAGS } from '../utils/constants.js';
 // SÉLECTION DES ÉLÉMENTS DOM
 // ============================================================================
 
-const elements = {
-  // Boutons
-  startStopBtn: document.getElementById('startStopBtn'),
-  openWindowBtn: document.getElementById('openWindow'),
-  generateReportBtn: document.getElementById('generateReport'),
-  resetBtn: document.getElementById('resetBtn'),
-  testPermissionsBtn: document.getElementById('testPermissions'),
-  
-  // Containers
-  adviceList: document.getElementById('adviceList'),
-  emptyState: document.getElementById('emptyState'),
-  reportContent: document.getElementById('reportContent'),
-  reportLoading: document.getElementById('reportLoading'),
-  reportData: document.getElementById('reportData'),
-  reportEmpty: document.getElementById('reportEmpty'),
-  
-  // Level system
-  levelBadge: document.getElementById('levelBadge'),
-  levelTitle: document.getElementById('levelTitle'),
-  levelSubtitle: document.getElementById('levelSubtitle'),
-  progressFill: document.getElementById('progressFill'),
-  currentLevelLabel: document.getElementById('currentLevelLabel'),
-  progressScore: document.getElementById('progressScore'),
-  nextLevelLabel: document.getElementById('nextLevelLabel'),
-  
-  // Debug
-  debugCard: document.getElementById('debugCard'),
-  debugInfo: document.getElementById('debugInfo')
-};
+// 🆕 Les éléments seront sélectionnés APRÈS le chargement du DOM
+let elements = null;
 
 // ============================================================================
 // INITIALISATION DES SERVICES ET COMPOSANTS
@@ -72,12 +45,98 @@ let isListening = false;
 let isInitializing = false; // 🆕 Protection contre les appels multiples
 
 /**
+ * Initialise les références aux éléments DOM
+ * DOIT être appelé APRÈS le chargement complet du DOM
+ */
+function initializeDOMElements() {
+  Logger.debug('🔍 Initialisation des éléments DOM...');
+  
+  // 🆕 Essayer les deux possibilités d'IDs pour adviceList
+  const adviceList = document.getElementById('adviceList') || document.getElementById('advice');
+  const emptyState = document.getElementById('emptyState') || document.getElementById('empty-state');
+  
+  elements = {
+    // Boutons
+    startStopBtn: document.getElementById('startStopBtn'),
+    openWindowBtn: document.getElementById('openWindow'),
+    generateReportBtn: document.getElementById('generateReport'),
+    resetBtn: document.getElementById('resetBtn'),
+    testPermissionsBtn: document.getElementById('testPermissions'),
+    
+    // Containers - Essayer les deux possibilités d'IDs
+    adviceList: adviceList,
+    emptyState: emptyState,
+    reportContent: document.getElementById('reportContent'),
+    reportLoading: document.getElementById('reportLoading'),
+    reportData: document.getElementById('reportData'),
+    reportEmpty: document.getElementById('reportEmpty'),
+    
+    // Level system
+    levelBadge: document.getElementById('levelBadge'),
+    levelTitle: document.getElementById('levelTitle'),
+    levelSubtitle: document.getElementById('levelSubtitle'),
+    progressFill: document.getElementById('progressFill'),
+    currentLevelLabel: document.getElementById('currentLevelLabel'),
+    progressScore: document.getElementById('progressScore'),
+    nextLevelLabel: document.getElementById('nextLevelLabel'),
+    
+    // Debug
+    debugCard: document.getElementById('debugCard'),
+    debugInfo: document.getElementById('debugInfo')
+  };
+  
+  // Log des IDs trouvés
+  Logger.debug('IDs détectés:', {
+    adviceList: adviceList?.id || 'NON TROUVÉ',
+    emptyState: emptyState?.id || 'NON TROUVÉ'
+  });
+  
+  // Vérifier les éléments critiques
+  const criticalElements = ['adviceList', 'emptyState', 'startStopBtn'];
+  const missingElements = [];
+  
+  for (const key of criticalElements) {
+    if (!elements[key]) {
+      missingElements.push(key);
+    }
+  }
+  
+  if (missingElements.length > 0) {
+    // 🆕 Log détaillé de tous les IDs présents dans le DOM
+    Logger.error('❌ Éléments manquants:', missingElements);
+    Logger.error('📋 Tous les IDs dans le DOM:');
+    const allElements = document.querySelectorAll('[id]');
+    allElements.forEach(el => {
+      Logger.debug(`  - #${el.id}`);
+    });
+    
+    throw new Error(`Éléments DOM manquants: ${missingElements.join(', ')}`);
+  }
+  
+  Logger.debug('✅ Tous les éléments DOM critiques ont été trouvés');
+}
+
+/**
  * Initialise tous les services et composants
  */
 async function initializeApp() {
   Logger.info('🚀 Initialisation de l\'application KITT');
   
   try {
+    // 🆕 VÉRIFIER QUE LES ÉLÉMENTS DOM EXISTENT
+    if (!elements.adviceList) {
+      throw new Error('❌ ERREUR CRITIQUE : Element #adviceList introuvable dans le DOM');
+    }
+    
+    if (!elements.emptyState) {
+      throw new Error('❌ ERREUR CRITIQUE : Element #emptyState introuvable dans le DOM');
+    }
+    
+    Logger.debug('✓ Éléments DOM validés', {
+      adviceList: !!elements.adviceList,
+      emptyState: !!elements.emptyState
+    });
+    
     // Initialiser les services
     audioCaptureService = new AudioCaptureService();
     audioProcessingService = new AudioProcessingService();
@@ -88,6 +147,8 @@ async function initializeApp() {
       elements.adviceList,
       elements.emptyState
     );
+    
+    Logger.debug('✓ InsightsManager créé avec succès');
     
     reportGenerator = new ReportGenerator(
       elements.reportData,
@@ -121,6 +182,7 @@ async function initializeApp() {
   } catch (error) {
     Logger.error('❌ Erreur lors de l\'initialisation', error);
     showErrorNotification('Erreur d\'initialisation de l\'application');
+    throw error; // Relancer l'erreur pour empêcher l'utilisation
   }
 }
 
@@ -211,11 +273,13 @@ async function stopListening() {
     // 1. Arrêter le traitement audio
     if (audioProcessingService) {
       audioProcessingService.stopProcessing();
+      Logger.debug('✓ AudioProcessingService arrêté');
     }
     
     // 2. Arrêter la capture audio
     if (audioCaptureService) {
       audioCaptureService.stopCapture();
+      Logger.debug('✓ AudioCaptureService arrêté');
     }
     
     // 3. Mettre à jour l'UI
@@ -293,26 +357,44 @@ function updateUIForListening(listening) {
  * @param {Object} data - Données retournées par le backend
  */
 function handleAudioData(data) {
-  Logger.audio('Données audio reçues', { hasAdvice: !!data.advice });
+  Logger.audio('📦 Données reçues du backend', data);
+  
+  // Vérifier la structure des données
+  if (!data) {
+    Logger.warn('⚠️ Données vides reçues du backend');
+    return;
+  }
   
   // Traiter l'insight si présent
   if (data.advice) {
-    const displayed = insightsManager.displayInsight(data.advice);
+    Logger.insight('💡 Insight détecté dans la réponse', data.advice);
     
-    if (displayed) {
-      // Ajouter des points si l'insight est affiché
-      levelSystem.addPoints(10);
+    try {
+      const displayed = insightsManager.displayInsight(data.advice);
+      
+      if (displayed) {
+        Logger.info('✅ Insight affiché avec succès');
+        // Ajouter des points si l'insight est affiché
+        levelSystem.addPoints(10);
+      } else {
+        Logger.warn('⚠️ Insight non affiché (doublon ou throttle)');
+      }
+    } catch (error) {
+      Logger.error('❌ Erreur lors de l\'affichage de l\'insight', error);
+    }
+  } else {
+    Logger.debug('ℹ️ Pas d\'insight dans cette réponse');
+    
+    // Log la raison si présente
+    if (data.reason) {
+      Logger.debug(`Raison : ${data.reason}`);
     }
   }
   
   // Enregistrer la transcription si présente
   if (data.transcription && data.transcription.trim()) {
+    Logger.debug('📝 Transcription ajoutée');
     sessionService.addTranscript(data.transcription);
-  }
-  
-  // Log la raison si pas d'insight
-  if (data.reason) {
-    Logger.debug(`Pas d'insight: ${data.reason}`);
   }
 }
 
@@ -483,10 +565,13 @@ async function main() {
     Logger.info('🚗 KITT Extension - Démarrage');
     Logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
-    // Initialiser l'application
+    // 🆕 ÉTAPE 1 : Initialiser les références DOM
+    initializeDOMElements();
+    
+    // ÉTAPE 2 : Initialiser l'application
     await initializeApp();
     
-    // Initialiser les event listeners
+    // ÉTAPE 3 : Initialiser les event listeners
     initializeEventListeners();
     
     Logger.info('✨ Application prête');

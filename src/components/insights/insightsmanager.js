@@ -16,10 +16,24 @@ import { calculateSimilarity } from '../../utils/helpers.js';
 
 export class InsightsManager {
   constructor(containerElement, emptyStateElement) {
+    // 🆕 VALIDATION DES ÉLÉMENTS
+    if (!containerElement) {
+      throw new Error('InsightsManager: containerElement est requis et ne peut pas être null');
+    }
+    
+    if (!emptyStateElement) {
+      throw new Error('InsightsManager: emptyStateElement est requis et ne peut pas être null');
+    }
+    
     this.container = containerElement;
     this.emptyState = emptyStateElement;
     this.displayedInsights = [];
     this.lastAdviceTime = 0;
+    
+    Logger.debug('✓ InsightsManager initialisé', {
+      containerId: this.container.id,
+      emptyStateId: this.emptyState.id
+    });
   }
 
   /**
@@ -28,11 +42,13 @@ export class InsightsManager {
    * @returns {boolean} True si affiché, false sinon
    */
   displayInsight(advice) {
+    Logger.info('🎯 InsightsManager.displayInsight appelé', advice);
+    
     const now = Date.now();
 
     // Validation de la structure
     if (!this._validateInsightStructure(advice)) {
-      Logger.warn('Structure d\'insight invalide', advice);
+      Logger.warn('⚠️ Structure d\'insight invalide', advice);
       return false;
     }
 
@@ -53,6 +69,7 @@ export class InsightsManager {
     }
 
     // Toutes les validations passées, afficher l'insight
+    Logger.info('✅ Toutes les validations passées, affichage de l\'insight');
     this._renderInsight(advice, now);
     this.lastAdviceTime = now;
 

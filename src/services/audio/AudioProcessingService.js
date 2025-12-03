@@ -39,6 +39,14 @@ export class AudioProcessingService {
 
     this.sessionId = sessionId;
     this.onDataCallback = onDataCallback;
+    
+    // 🆕 VÉRIFIER que le callback est bien défini
+    if (!onDataCallback || typeof onDataCallback !== 'function') {
+      Logger.error('❌ ERREUR CRITIQUE : Callback non défini ou invalide !');
+      throw new Error('Callback obligatoire pour traiter les données audio');
+    }
+    
+    Logger.debug('✓ Callback enregistré correctement');
 
     try {
       // Créer le contexte audio
@@ -98,6 +106,12 @@ export class AudioProcessingService {
       Logger.debug('⏸️ Contexte audio inexistant, skip buffer');
       return;
     }
+    
+    // 🆕 Si on est en train d'envoyer, NE PAS accumuler dans le buffer actuel
+    if (this._isSending) {
+      Logger.debug('⏸️ Envoi en cours, buffer mis en attente');
+      return;
+    }
 
     try {
       // Récupérer les données des deux canaux
@@ -110,6 +124,7 @@ export class AudioProcessingService {
 
       // Vérifier si on a assez de données pour envoyer
       if (this.audioBuffer.client.length >= this.bufferThreshold) {
+        Logger.debug(`📊 Seuil atteint: ${this.audioBuffer.client.length} échantillons`);
         // Empêcher l'envoi multiple pendant qu'on traite
         if (!this._isSending) {
           this._sendAudioToBackend();
@@ -131,10 +146,10 @@ export class AudioProcessingService {
       return;
     }
 
-    // Protection temporelle (minimum 2.5 secondes entre envois)
+    // Protection temporelle (minimum 1.5 secondes entre envois)
     const now = Date.now();
     const timeSinceLastSend = now - this._lastSendTime;
-    if (timeSinceLastSend < 2500 && this._lastSendTime > 0) {
+    if (timeSinceLastSend < 1500 && this._lastSendTime > 0) {
       Logger.warn(`⚠️ Envoi trop rapide (${timeSinceLastSend}ms), skip`);
       return;
     }
@@ -144,9 +159,12 @@ export class AudioProcessingService {
     this._lastSendTime = now;
 
     try {
+      // 🆕 LOG DE LA TAILLE AVANT COPIE
+      const originalSize = this.audioBuffer.client.length;
       Logger.audio('📤 Envoi de l\'audio au backend', {
-        clientSamples: this.audioBuffer.client.length,
-        commercialSamples: this.audioBuffer.commercial.length
+        clientSamples: originalSize,
+        commercialSamples: this.audioBuffer.commercial.length,
+        durationSeconds: (originalSize / AUDIO_CONFIG.SAMPLE_RATE).toFixed(2)
       });
 
       // Copier les buffers AVANT de les vider (pour éviter les race conditions)
@@ -156,6 +174,9 @@ export class AudioProcessingService {
       // Vider les buffers IMMÉDIATEMENT pour éviter les doublons
       this.audioBuffer.client = [];
       this.audioBuffer.commercial = [];
+      
+      // 🆕 VÉRIFIER QUE LE VIDAGE A FONCTIONNÉ
+      Logger.debug(`✓ Buffers vidés (client: ${this.audioBuffer.client.length}, commercial: ${this.audioBuffer.commercial.length})`);
 
       // Convertir Float32 → PCM 16-bit
       const clientBuffer = float32ToPCM16(new Float32Array(clientBufferCopy));
@@ -181,9 +202,39 @@ export class AudioProcessingService {
 
       const data = await response.json();
       
+      Logger.audio('✅ Réponse du backend reçue', {
+        hasAdvice: !!data.advice,
+        hasTranscription: !!data.transcription,
+        reason: data.reason || 'N/A'
+      });
+      
+      // 🆕 LOG DÉTAILLÉ de l'advice si présent
+      if (data.advice) {
+        Logger.info('💡 INSIGHT REÇU DU BACKEND:', {
+          type: data.advice.type,
+          title: data.advice.title,
+          description: data.advice.details?.description
+        });
+      }
+      
+      // 🆕 LOG de la transcription si présente
+      if (data.transcription) {
+        const transcriptLength = data.transcription.length;
+        Logger.debug(`📝 Transcription reçue (${transcriptLength} caractères)`);
+        
+        // 🆕 ALERTE si transcription trop longue
+        if (transcriptLength > 500) {
+          Logger.warn(`⚠️ TRANSCRIPTION ANORMALEMENT LONGUE: ${transcriptLength} caractères`);
+          Logger.warn(`   Contenu: ${data.transcription.substring(0, 100)}...`);
+        }
+      }
+      
       // Appeler le callback avec les données
       if (this.onDataCallback) {
+        Logger.debug('📞 Appel du callback avec les données');
         this.onDataCallback(data);
+      } else {
+        Logger.error('❌ CALLBACK NON DÉFINI ! Les insights ne peuvent pas être affichés');
       }
 
       Logger.audio('✅ Audio envoyé avec succès');
