@@ -31,10 +31,11 @@ let bufferThreshold = 661500;
 
 // Throttling optimisé
 let lastAdviceTime = 0;
-const MIN_ADVICE_INTERVAL = 7000; // 7s
+import { THROTTLING_CONFIG, UI_CONFIG } from './utils/constants.js';
+const minInterval = THROTTLING_CONFIG.MIN_ADVICE_INTERVAL;
+const displayDuration = UI_CONFIG.INSIGHT_DISPLAY_DURATION;
 
-// Durée d'affichage augmentée
-const INSIGHT_DISPLAY_DURATION = 300000; // 5 minutes
+
 
 // Cache local des insights
 let displayedInsights = [];

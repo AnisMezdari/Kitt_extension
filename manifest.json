@@ -1,19 +1,58 @@
 {
   "manifest_version": 3,
-  "name": "KITT Extension",
-  "version": "1.0.0",
-  "description": "Assistant IA en temps réel pour vos appels de vente",
+  "name": "KITT - AI Sales Assistant",
+  "version": "2.1.0",
+  "description": "Assistant IA en temps réel pour optimiser vos appels commerciaux avec insights instantanés et rapports détaillés",
+  
+  "icons": {
+    "16": "src/assets/icons/icon-16.png",
+    "32": "src/assets/icons/icon-32.png",
+    "48": "src/assets/icons/icon-48.png",
+    "128": "src/assets/icons/icon-128.png"
+  },
+  
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "src/assets/icons/icon-16.png",
+      "32": "src/assets/icons/icon-32.png",
+      "48": "src/assets/icons/icon-48.png",
+      "128": "src/assets/icons/icon-128.png"
+    },
+    "default_title": "KITT - Sales Assistant"
+  },
+  
   "permissions": [
     "tabCapture",
     "activeTab",
     "windows",
-    "tabs"
+    "tabs",
+    "storage"
   ],
-  "action": {
-    "default_popup": "popup.html"
-  },
   
   "host_permissions": [
     "http://localhost:8000/*"
-  ]
+  ],
+  
+  "background": {
+    "service_worker": "src/background/background.js"
+  },
+  
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/assets/icons/*.png",
+        "src/assets/images/*.svg",
+        "src/assets/images/*.gif"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  
+  "author": "KITT Team",
+  "homepage_url": "https://github.com/AnisMezdari/Kitt_extension"
 }
