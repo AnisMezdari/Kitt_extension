@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>KITT Extension v2.1</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="kitt-container">
+    <!-- En-tête avec logo et bouton Open App -->
+    <header class="kitt-header">
+      <div class="header-left">
+        <img src="KITT_v5.png" alt="Logo KITT" class="kitt-logo">
+      </div>
+      <button id="openWindow" class="btn-open-app">Open [ ]</button>
+    </header>
+    <!-- 🆕 SYSTÈME DE NIVEAUX / GAMIFICATION -->
+    <section class="level-card">
+      <div class="level-info">
+        <div class="level-badge">2</div>
+        <div class="level-text">
+          <h3>Level 2</h3>
+          <p>800 points to next level</p>
+        </div>
+      </div>
+      <div class="level-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 87%;"></div>
+        </div>
+        <div class="progress-labels">
+          <span class="current-level">2</span>
+          <span class="progress-score">★ 5200/6000</span>
+          <span class="next-level">3</span>
+        </div>
+      </div>
+    </section>
+    <!-- Séparateur "En cours d'appel" -->
+    <div class="section-divider">
+      <span>En cours d'appel</span>
+    </div>
+    <!-- Section Real-time Insights -->
+    <section class="kitt-card insights-card">
+      <div class="insights-header collapsible-header" data-target="insightsSection">
+        <div class="header-with-icon">
+          <div class="chevron-icon">›</div>
+          <h2>Real-time Insights</h2>
+        </div>
+        <div class="insights-actions">
+          <button id="startStopBtn" class="btn-start-listening">Start Listening</button>
+          <button id="resetBtn" class="btn-reset">Reset</button>
+        </div>
+      </div>
+      <div id="insightsSection" class="collapsible-content">
+        <div class="advice-container">
+          <div id="advice" class="advice-list">
+            <!-- Les insights seront ajoutés dynamiquement ici -->
+          </div>
+          <div id="empty-state" class="empty-state">
+            Aucun insight pour le moment. Démarrez l'écoute pour recevoir des recommandations.
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Séparateur "Post - Appel" -->
+    <div class="section-divider">
+      <span>Post - Appel</span>
+    </div>
+    <!-- Section Compte-Rendu (Post-Appel) -->
+    <section class="kitt-card post-call-card">
+      <div class="collapsible-header" data-target="reportSection">
+        <div class="header-with-icon">
+          <div class="chevron-icon">›</div>
+          <h2>Compte - Rendu</h2>
+        </div>
+        <button id="generateReport" class="btn-generate-small">+ generer</button>
+      </div>
+      <div id="reportSection" class="collapsible-content collapsed">
+        <div id="reportEmpty" class="empty-state">
+          Terminez un appel et cliquez sur "generer" pour obtenir un compte-rendu détaillé.
+        </div>
+        
+        <div id="reportContent" class="report-content" style="display: none;">
+          <div id="reportLoading" class="report-loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyse en cours...</p>
+          </div>
+          <div id="reportData" class="report-data"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
