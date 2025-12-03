@@ -1,689 +1,516 @@
-/*
-============================================================================
-POPUP.JS MODERNISÉ - VERSION AVEC DESIGN AMÉLIORÉ ET FIX macOS
-============================================================================
-*/
+/**
+ * POPUP.JS - ORCHESTRATEUR PRINCIPAL
+ * ===================================
+ * Version restructurée selon l'architecture modulaire
+ */
 
-// ======== SÉLECTION DES ÉLÉMENTS DOM ========
-const startStopBtn = document.getElementById("startStopBtn");
-const adviceList = document.getElementById("advice");
-const emptyState = document.getElementById("empty-state");
-const openWindowBtn = document.getElementById("openWindow");
-const generateReportBtn = document.getElementById("generateReport");
-const reportContent = document.getElementById("reportContent");
-const reportLoading = document.getElementById("reportLoading");
-const reportData = document.getElementById("reportData");
-const reportEmpty = document.getElementById("reportEmpty");
-const resetBtn = document.getElementById('resetBtn');
+// ============================================================================
+// IMPORTS
+// ============================================================================
 
-// ======== VARIABLES GLOBALES ========
-let mediaStream = null;
-let micStream = null;
-let audioContext = null;
-let processor = null;
-let audioBuffer = { client: [], commercial: [] };
-let isListening = false;
-let currentSessionId = null;
-let conversationTranscript = [];
+// Services
+import { AudioCaptureService } from '../services/audio/AudioCaptureService.js';
+import { AudioProcessingService } from '../services/audio/AudioProcessingService.js';
+import { SessionService } from '../services/api/SessionService.js';
 
-let sendIntervalSeconds = 3;
-let bufferThreshold = 661500;
+// Composants
+import { InsightsManager } from '../components/insights/InsightsManager.js';
+import { ReportGenerator } from '../components/report/ReportGenerator.js';
+import { LevelSystem } from '../components/level/LevelSystem.js';
+import { CollapsibleSection } from '../components/ui/CollapsibleSection.js';
 
-// Throttling optimisé
-let lastAdviceTime = 0;
-import { THROTTLING_CONFIG, UI_CONFIG } from './utils/constants.js';
-const minInterval = THROTTLING_CONFIG.MIN_ADVICE_INTERVAL;
-const displayDuration = UI_CONFIG.INSIGHT_DISPLAY_DURATION;
+// Utils
+import { Logger } from '../utils/logger.js';
+import { FEATURE_FLAGS } from '../utils/constants.js';
 
+// ============================================================================
+// SÉLECTION DES ÉLÉMENTS DOM
+// ============================================================================
 
-
-// Cache local des insights
-let displayedInsights = [];
-const MAX_CACHED_INSIGHTS = 10;
-
-// ======== BOUTON DE TEST DES PERMISSIONS ========
-document.getElementById('testPermissions')?.addEventListener('click', async () => {
-  console.log("🧪 Test des permissions...");
+const elements = {
+  // Boutons
+  startStopBtn: document.getElementById('startStopBtn'),
+  openWindowBtn: document.getElementById('openWindow'),
+  generateReportBtn: document.getElementById('generateReport'),
+  resetBtn: document.getElementById('resetBtn'),
+  testPermissionsBtn: document.getElementById('testPermissions'),
   
-  try {
-    const micTest = await navigator.mediaDevices.getUserMedia({ audio: true });
-    console.log("✅ Microphone OK");
-    micTest.getTracks().forEach(t => t.stop());
-    
-    const displayTest = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
-    console.log("✅ Partage d'écran OK");
-    console.log("📊 Pistes audio:", displayTest.getAudioTracks().length);
-    displayTest.getTracks().forEach(t => t.stop());
-    
-    alert("✅ Toutes les permissions fonctionnent !");
-  } catch (e) {
-    console.error("❌ Erreur:", e);
-    alert(`❌ Erreur: ${e.message}\n\nSur Mac, vérifiez:\n- Préférences Système → Sécurité → Microphone\n- Préférences Système → Sécurité → Enregistrement d'écran`);
-  }
-});
-
-// ======== GESTION DES SECTIONS PLIABLES ========
-document.querySelectorAll('.collapsible-header').forEach(header => {
-  header.addEventListener('click', function(e) {
-    // Ne pas plier/déplier si on clique sur un bouton ou un élément interactif
-    if (e.target.classList.contains('btn-generate-small') || 
-        e.target.classList.contains('btn-start-listening') ||
-        e.target.classList.contains('btn-stop-listening') ||
-        e.target.classList.contains('btn-reset')) {
-      return;
-    }
-    
-    const target = this.getAttribute('data-target');
-    const content = document.getElementById(target);
-    
-    if (!content) return;
-    
-    const isCollapsed = content.classList.contains('collapsed');
-    
-    if (isCollapsed) {
-      content.classList.remove('collapsed');
-      this.classList.add('expanded');
-    } else {
-      content.classList.add('collapsed');
-      this.classList.remove('expanded');
-    }
-  });
-});
-
-// ======== OUVRIR L'EXTENSION DANS UNE NOUVELLE FENÊTRE ========
-if (openWindowBtn) {
-  openWindowBtn.onclick = () => {
-    chrome.windows.create({
-      url: chrome.runtime.getURL("popup.html"),
-      type: "popup",
-      width: 450,
-      height: 900,
-      focused: true
-    });
-  };
-}
-
-// ======== CONFIGURATION DES TYPES DE CONSEILS ========
-const adviceTypes = {
-  progression: {
-    color: '#48BB78',
-    icon: chrome.runtime.getURL('img/fusée.png'),
-    label: '🟢 Progression'
-  },
-  opportunity: {
-    color: '#4299E1',
-    icon: chrome.runtime.getURL('img/cible.png'),
-    label: '🔵 Opportunité'
-  },
-  alert: {
-    color: '#F6AD55',
-    icon: chrome.runtime.getURL('img/cloche.png'),
-    label: '🟡 Alerte'
-  }
+  // Containers
+  adviceList: document.getElementById('adviceList'),
+  emptyState: document.getElementById('emptyState'),
+  reportContent: document.getElementById('reportContent'),
+  reportLoading: document.getElementById('reportLoading'),
+  reportData: document.getElementById('reportData'),
+  reportEmpty: document.getElementById('reportEmpty'),
+  
+  // Level system
+  levelBadge: document.getElementById('levelBadge'),
+  levelTitle: document.getElementById('levelTitle'),
+  levelSubtitle: document.getElementById('levelSubtitle'),
+  progressFill: document.getElementById('progressFill'),
+  currentLevelLabel: document.getElementById('currentLevelLabel'),
+  progressScore: document.getElementById('progressScore'),
+  nextLevelLabel: document.getElementById('nextLevelLabel'),
+  
+  // Debug
+  debugCard: document.getElementById('debugCard'),
+  debugInfo: document.getElementById('debugInfo')
 };
 
-// ======== FONCTION DE VÉRIFICATION DE DOUBLON ========
-function isInsightDuplicate(newInsight) {
-  const newText = `${newInsight.title} ${newInsight.details.description}`.toLowerCase();
+// ============================================================================
+// INITIALISATION DES SERVICES ET COMPOSANTS
+// ============================================================================
+
+let audioCaptureService = null;
+let audioProcessingService = null;
+let sessionService = null;
+let insightsManager = null;
+let reportGenerator = null;
+let levelSystem = null;
+
+let isListening = false;
+let isInitializing = false; // 🆕 Protection contre les appels multiples
+
+/**
+ * Initialise tous les services et composants
+ */
+async function initializeApp() {
+  Logger.info('🚀 Initialisation de l\'application KITT');
   
-  for (let i = Math.max(0, displayedInsights.length - 5); i < displayedInsights.length; i++) {
-    const oldInsight = displayedInsights[i];
-    const oldText = `${oldInsight.title} ${oldInsight.details.description}`.toLowerCase();
+  try {
+    // Initialiser les services
+    audioCaptureService = new AudioCaptureService();
+    audioProcessingService = new AudioProcessingService();
+    sessionService = new SessionService();
     
-    const newWords = new Set(newText.split(/\s+/));
-    const oldWords = new Set(oldText.split(/\s+/));
+    // Initialiser les composants
+    insightsManager = new InsightsManager(
+      elements.adviceList,
+      elements.emptyState
+    );
     
-    const intersection = new Set([...newWords].filter(x => oldWords.has(x)));
-    const union = new Set([...newWords, ...oldWords]);
+    reportGenerator = new ReportGenerator(
+      elements.reportData,
+      elements.reportLoading,
+      elements.reportEmpty
+    );
     
-    const similarity = intersection.size / union.size;
+    levelSystem = new LevelSystem({
+      badgeElement: elements.levelBadge,
+      titleElement: elements.levelTitle,
+      subtitleElement: elements.levelSubtitle,
+      progressFillElement: elements.progressFill,
+      currentLevelElement: elements.currentLevelLabel,
+      scoreElement: elements.progressScore,
+      nextLevelElement: elements.nextLevelLabel
+    });
     
-    if (similarity > 0.45) {
-      return true;
+    // Initialiser les sections pliables
+    CollapsibleSection.initializeAll();
+    
+    // Charger les données persistantes
+    await loadPersistedData();
+    
+    // Activer le mode debug si nécessaire
+    if (FEATURE_FLAGS.DEBUG_MODE) {
+      elements.debugCard.style.display = 'block';
     }
-  }
-  
-  return false;
-}
-
-// ======== FONCTION POUR SUPPRIMER UN INSIGHT APRÈS EXPIRATION ========
-function removeInsightAfterDelay(insightElement, delay) {
-  setTimeout(() => {
-    insightElement.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-    insightElement.style.opacity = '0';
-    insightElement.style.transform = 'translateX(-30px)';
     
-    setTimeout(() => {
-      insightElement.remove();
-      
-      if (adviceList.querySelectorAll('.advice-item').length === 0) {
-        emptyState.style.display = "block";
-      }
-    }, 500);
-  }, delay);
+    Logger.info('✅ Application initialisée avec succès');
+    
+  } catch (error) {
+    Logger.error('❌ Erreur lors de l\'initialisation', error);
+    showErrorNotification('Erreur d\'initialisation de l\'application');
+  }
 }
 
-// ======== AFFICHAGE DES CONSEILS ========
-function displayAdvice(advice) {
-  const now = Date.now();
+/**
+ * Charge les données persistantes depuis le storage
+ */
+async function loadPersistedData() {
+  try {
+    await levelSystem.loadFromStorage();
+    Logger.debug('Données de niveau chargées');
+  } catch (error) {
+    Logger.warn('Impossible de charger les données persistantes', error);
+  }
+}
+
+// ============================================================================
+// GESTION DE L'ÉCOUTE (START / STOP)
+// ============================================================================
+
+/**
+ * Démarre l'écoute audio
+ */
+async function startListening() {
+  Logger.session('Démarrage de l\'écoute');
   
-  // Throttling
-  if (now - lastAdviceTime < MIN_ADVICE_INTERVAL) {
-    console.log(`[THROTTLE] Trop tôt (${(now - lastAdviceTime) / 1000}s < 7s)`);
+  // 🆕 PROTECTION : Empêcher les appels multiples
+  if (isInitializing || isListening) {
+    Logger.warn('⚠️ Écoute déjà en cours ou en démarrage');
     return;
   }
   
-  // Vérification doublon
-  if (isInsightDuplicate(advice)) {
-    console.log(`[BLOCKED] Insight trop similaire détecté`);
-    return;
-  }
+  isInitializing = true;
   
-  // Vérification du même type dans les 5 dernières secondes
-  const recentInsights = adviceList.querySelectorAll('.advice-item');
-  for (let item of recentInsights) {
-    const itemType = item.getAttribute('data-type');
-    const itemTimestamp = parseInt(item.getAttribute('data-timestamp') || '0');
+  try {
+    // Désactiver le bouton pendant le démarrage
+    elements.startStopBtn.disabled = true;
     
-    if (itemType === advice.type && (now - itemTimestamp) < 5000) {
-      console.log(`[BLOCKED] Même type "${advice.type}" détecté il y a ${((now - itemTimestamp) / 1000).toFixed(1)}s`);
-      return;
-    }
+    // 🆕 NETTOYER les anciennes instances si elles existent
+    await cleanupAudioResources();
+    
+    // 🆕 RECRÉER les services (pour être sûr d'avoir des instances fraîches)
+    audioCaptureService = new AudioCaptureService();
+    audioProcessingService = new AudioProcessingService();
+    
+    // 1. Créer la session
+    const sessionId = await sessionService.createSession();
+    Logger.session('Session créée', { sessionId });
+    
+    // 2. Capturer l'audio (microphone + écran)
+    const { micStream, displayStream } = await audioCaptureService.startCapture();
+    
+    // 3. Démarrer le traitement audio
+    await audioProcessingService.startProcessing(
+      micStream,
+      displayStream,
+      sessionId,
+      handleAudioData
+    );
+    
+    // 4. Mettre à jour l'UI
+    updateUIForListening(true);
+    isListening = true;
+    
+    Logger.session('✅ Écoute démarrée avec succès');
+    
+  } catch (error) {
+    Logger.error('❌ Erreur lors du démarrage de l\'écoute', error);
+    
+    // Nettoyer en cas d'erreur
+    await cleanupAudioResources();
+    
+    // Afficher un message d'erreur approprié
+    showErrorNotification(error.message);
+    
+  } finally {
+    isInitializing = false;
+    elements.startStopBtn.disabled = false;
   }
-  
-  lastAdviceTime = now;
-  
-  // Ajouter au cache
-  displayedInsights.push(advice);
-  if (displayedInsights.length > MAX_CACHED_INSIGHTS) {
-    displayedInsights = displayedInsights.slice(-MAX_CACHED_INSIGHTS);
-  }
-  
-  // Retirer la classe "new-insight" des anciens
-  adviceList.querySelectorAll('.advice-item').forEach(item => {
-    item.classList.remove('new-insight');
-  });
-  
-  emptyState.style.display = "none";
-
-  const adviceItem = document.createElement("div");
-  adviceItem.className = "advice-item new-insight";
-  adviceItem.setAttribute("data-timestamp", now.toString());
-
-  const title = advice.title || "Conseil IA";
-  let type = advice.type || "progression";
-  const details = advice.details || {};
-  const description = details.description || "Aucune description disponible";
-  
-  // Validation du type
-  const validTypes = ["progression", "opportunity", "alert"];
-  if (!validTypes.includes(type)) {
-    console.warn(`[VALIDATION] Type invalide : ${type}. Utilisation de "progression"`);
-    type = "progression";
-  }
-  
-  adviceItem.setAttribute("data-type", type);
-
-  const typeConfig = adviceTypes[type] || adviceTypes.progression;
-  
-  adviceItem.innerHTML = `
-    <div class="advice-icon-container">
-      <img src="${typeConfig.icon}" alt="${typeConfig.label}" class="advice-icon-image">
-    </div>
-    <div class="advice-text-content">
-      <div class="advice-compact-title">${title}</div>
-      <p class="advice-compact-description">${description}</p>
-    </div>
-    <button class="advice-menu-btn">⋮</button>
-  `;
-
-  adviceList.appendChild(adviceItem);
-  
-  requestAnimationFrame(() => {
-    adviceItem.classList.add("show");
-    setTimeout(() => {
-      try {
-        adviceItem.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      } catch (e) {
-        adviceList.scrollTop = adviceList.scrollHeight;
-      }
-    }, 20);
-  });
-  
-  setTimeout(() => {
-    adviceItem.classList.remove('new-insight');
-  }, 5000);
-  
-  removeInsightAfterDelay(adviceItem, INSIGHT_DISPLAY_DURATION);
-  
-  console.log(`[INSIGHT] Affiché : ${typeConfig.label} - ${title}`);
 }
 
-// ======== BOUTON RESET - EFFACER TOUS LES INSIGHTS ========
-if (resetBtn) {
-  resetBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    
-    // Demander confirmation
-    if (confirm('Voulez-vous effacer tous les insights affichés ?')) {
-      // Animer la disparition de chaque insight
-      const insights = adviceList.querySelectorAll('.advice-item');
-      
-      insights.forEach((insight, index) => {
-        setTimeout(() => {
-          insight.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-          insight.style.opacity = '0';
-          insight.style.transform = 'translateX(-30px)';
-          
-          setTimeout(() => {
-            insight.remove();
-            
-            // Afficher l'état vide si c'était le dernier
-            if (index === insights.length - 1) {
-              emptyState.style.display = "block";
-            }
-          }, 300);
-        }, index * 50); // Effet en cascade
-      });
-      
-      // Vider le cache
-      displayedInsights = [];
-      
-      console.log('[RESET] Tous les insights ont été effacés');
+/**
+ * Arrête l'écoute audio
+ */
+async function stopListening() {
+  Logger.session('Arrêt de l\'écoute');
+  
+  try {
+    // 1. Arrêter le traitement audio
+    if (audioProcessingService) {
+      audioProcessingService.stopProcessing();
     }
-  });
+    
+    // 2. Arrêter la capture audio
+    if (audioCaptureService) {
+      audioCaptureService.stopCapture();
+    }
+    
+    // 3. Mettre à jour l'UI
+    updateUIForListening(false);
+    isListening = false;
+    
+    Logger.session('✅ Écoute arrêtée');
+    
+  } catch (error) {
+    Logger.error('❌ Erreur lors de l\'arrêt de l\'écoute', error);
+  }
 }
 
-// ======== GÉNÉRER LE COMPTE-RENDU ========
-if (generateReportBtn) {
-  generateReportBtn.onclick = async () => {
-    if (!currentSessionId) {
-      alert("Aucune session active. Démarrez un appel d'abord.");
-      return;
-    }
-
-    reportEmpty.style.display = "none";
-    reportContent.style.display = "block";
-    reportLoading.style.display = "block";
-    reportData.innerHTML = "";
-    generateReportBtn.disabled = true;
-
+/**
+ * Nettoie toutes les ressources audio
+ */
+async function cleanupAudioResources() {
+  Logger.debug('🧹 Nettoyage des ressources audio');
+  
+  // Arrêter le traitement audio
+  if (audioProcessingService) {
     try {
-      let fullTranscript = conversationTranscript.join("\n");
-      
-      if (!fullTranscript.trim() || conversationTranscript.length === 0) {
-        const stateResponse = await fetch(`http://localhost:8000/calls/${currentSessionId}/state`);
-        
-        if (!stateResponse.ok) {
-          throw new Error("Impossible de récupérer l'état de la session");
-        }
-        
-        const stateData = await stateResponse.json();
-        
-        if (stateData.message_count === 0) {
-          throw new Error("Aucune conversation enregistrée.");
-        }
-      }
-
-      const response = await fetch(`http://localhost:8000/resume/${currentSessionId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          call_id: currentSessionId,
-          user_message: fullTranscript || "",
-          timestamp: Date.now()
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Erreur lors de la génération du résumé");
-      }
-
-      const data = await response.json();
-      const summary = data.summary;
-
-      reportLoading.style.display = "none";
-      displaySummary(summary);
-
-      // Fermer la session
-      if (currentSessionId) {
-        fetch(`http://localhost:8000/calls/${currentSessionId}/end`, {
-          method: "POST"
-        })
-        .then(res => res.json())
-        .then(data => {
-          console.log("[SESSION] Terminée:", data);
-        })
-        .catch(err => console.error("Erreur fermeture session:", err));
-        
-        currentSessionId = null;
-      }
-
-    } catch (error) {
-      console.error("Erreur génération résumé:", error);
-      reportLoading.style.display = "none";
-      reportData.innerHTML = `
-        <div style="color: #FC8181; padding: 16px; background: rgba(254, 178, 178, 0.1); border-radius: 8px;">
-          <p>❌ ${error.message}</p>
-        </div>
-      `;
-    } finally {
-      generateReportBtn.disabled = false;
+      audioProcessingService.stopProcessing();
+      Logger.debug('✓ AudioProcessingService arrêté');
+    } catch (e) {
+      Logger.warn('Erreur arrêt AudioProcessingService', e);
     }
-  };
+  }
+  
+  // Arrêter la capture audio
+  if (audioCaptureService) {
+    try {
+      audioCaptureService.stopCapture();
+      Logger.debug('✓ AudioCaptureService arrêté');
+    } catch (e) {
+      Logger.warn('Erreur arrêt AudioCaptureService', e);
+    }
+  }
+  
+  // Fermer la session si active
+  if (sessionService && sessionService.hasActiveSession()) {
+    try {
+      await sessionService.endSession();
+      Logger.debug('✓ Session fermée');
+    } catch (e) {
+      Logger.warn('Erreur fermeture session', e);
+    }
+  }
+  
+  Logger.debug('✅ Nettoyage terminé');
 }
 
-// ======== AFFICHER LE RÉSUMÉ FORMATÉ ========
-function displaySummary(summary) {
-  if (!summary) return;
-
-  const replaceAsterisks = (text) => {
-    if (!text || typeof text !== "string") return text;
-    return text.replace(/\*/g, "Le client");
-  };
-
-  const keyPoints = summary.key_points || {};
-  const nextActions = summary.next_actions || {};
-  const mainSummary = replaceAsterisks(summary.summary?.main || "Résumé non disponible.");
-  const detailedSummary = replaceAsterisks(summary.summary?.details || "");
-
-  if (keyPoints.strengths) keyPoints.strengths = keyPoints.strengths.map(replaceAsterisks);
-  if (keyPoints.weaknesses) keyPoints.weaknesses = keyPoints.weaknesses.map(replaceAsterisks);
-  if (keyPoints.improvements) keyPoints.improvements = keyPoints.improvements.map(replaceAsterisks);
-  if (nextActions.actions) {
-    nextActions.actions = nextActions.actions.map(a => ({
-      ...a,
-      action: replaceAsterisks(a.action),
-      reason: replaceAsterisks(a.reason)
-    }));
+/**
+ * Met à jour l'interface pour refléter l'état d'écoute
+ * @param {boolean} listening - true si en écoute, false sinon
+ */
+function updateUIForListening(listening) {
+  if (listening) {
+    elements.startStopBtn.classList.remove('btn-start-listening');
+    elements.startStopBtn.classList.add('btn-stop-listening');
+    elements.startStopBtn.textContent = 'Stop Listening';
+  } else {
+    elements.startStopBtn.classList.remove('btn-stop-listening');
+    elements.startStopBtn.classList.add('btn-start-listening');
+    elements.startStopBtn.textContent = 'Start Listening';
   }
+}
 
-  let html = `
-    <div class="summary-subsection">
-      <div class="subsection-header">
-        <h3>📝 Résumé de l'appel</h3>
-        <button class="subsection-toggle">▼</button>
-      </div>
-      <div class="subsection-content">
-        <div style="background: rgba(124, 93, 250, 0.1); border-left: 4px solid #7C5DFA; padding: 14px; border-radius: 8px; margin-bottom: 12px;">
-          <p style="margin: 0; line-height: 1.6; color: #E2E8F0;">${mainSummary}</p>
-          ${detailedSummary ? `<p style="margin-top: 12px; color: #A0AEC0; font-size: 13px;">${detailedSummary}</p>` : ''}
-        </div>
-      </div>
-    </div>
+// ============================================================================
+// GESTION DES DONNÉES AUDIO
+// ============================================================================
 
-    ${nextActions.actions?.length ? `
-      <div class="summary-subsection">
-        <div class="subsection-header">
-          <h3>🚀 Prochaines actions</h3>
-          <button class="subsection-toggle">▼</button>
-        </div>
-        <div class="subsection-content">
-          <ul class="summary-list">
-            ${nextActions.actions.map(a => `
-              <li style="border-left: 3px solid #48BB78;">
-                <strong style="color: #E2E8F0;">${a.action}</strong><br>
-                <span style="color: #F6AD55; font-size: 12px;">⏰ ${a.deadline || 'Non spécifié'}</span><br>
-                <span style="color: #A0AEC0; font-size: 13px;">💡 ${a.reason || '-'}</span>
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-      </div>
-    ` : ''}
-
-    ${keyPoints.score || keyPoints.strengths?.length || keyPoints.weaknesses?.length || keyPoints.improvements?.length ? `
-      <div class="summary-subsection">
-        <div class="subsection-header">
-          <h3>🎯 Points clés & Évaluation</h3>
-          <button class="subsection-toggle">▼</button>
-        </div>
-        <div class="subsection-content">
-          ${keyPoints.score ? `
-            <div style="background: rgba(124, 93, 250, 0.15); border-left: 4px solid #7C5DFA; padding: 14px; border-radius: 8px; margin-bottom: 16px;">
-              <p style="font-size: 24px; font-weight: bold; color: #7C5DFA; margin: 0;">
-                ${keyPoints.score.value}/20
-              </p>
-              <p style="color: #A0AEC0; font-size: 13px; margin: 4px 0 0 0;">
-                ${replaceAsterisks(keyPoints.score.comment || '')}
-              </p>
-            </div>
-          ` : ''}
-
-          ${keyPoints.strengths?.length ? `
-            <p style="color: #E2E8F0; font-weight: 600; margin-bottom: 8px;">✅ Points forts</p>
-            <ul class="summary-list" style="margin-bottom: 16px;">
-              ${keyPoints.strengths.map(s => `<li style="border-left: 3px solid #48BB78;">${s}</li>`).join('')}
-            </ul>
-          ` : ''}
-
-          ${keyPoints.weaknesses?.length ? `
-            <p style="color: #E2E8F0; font-weight: 600; margin-bottom: 8px;">⚠️ Points faibles</p>
-            <ul class="summary-list" style="margin-bottom: 16px;">
-              ${keyPoints.weaknesses.map(w => `<li style="border-left: 3px solid #E53E3E;">${w}</li>`).join('')}
-            </ul>
-          ` : ''}
-
-          ${keyPoints.improvements?.length ? `
-            <p style="color: #E2E8F0; font-weight: 600; margin-bottom: 8px;">🎯 Axes d'amélioration</p>
-            <ul class="summary-list">
-              ${keyPoints.improvements.map(i => `<li style="border-left: 3px solid #F6AD55;">${i}</li>`).join('')}
-            </ul>
-          ` : ''}
-        </div>
-      </div>
-    ` : ''}
-  `;
-
-  reportData.innerHTML = html;
-
-  // Ajouter les gestionnaires pour déplier/replier les sous-sections
-  reportData.querySelectorAll('.subsection-header').forEach(header => {
-    const button = header.querySelector('.subsection-toggle');
-    const content = header.nextElementSibling;
+/**
+ * Callback appelé quand des données audio sont traitées
+ * @param {Object} data - Données retournées par le backend
+ */
+function handleAudioData(data) {
+  Logger.audio('Données audio reçues', { hasAdvice: !!data.advice });
+  
+  // Traiter l'insight si présent
+  if (data.advice) {
+    const displayed = insightsManager.displayInsight(data.advice);
     
-    header.onclick = () => {
-      const isCollapsed = content.classList.contains("collapsed");
-      if (isCollapsed) {
-        content.classList.remove("collapsed");
-        button.textContent = "▼";
+    if (displayed) {
+      // Ajouter des points si l'insight est affiché
+      levelSystem.addPoints(10);
+    }
+  }
+  
+  // Enregistrer la transcription si présente
+  if (data.transcription && data.transcription.trim()) {
+    sessionService.addTranscript(data.transcription);
+  }
+  
+  // Log la raison si pas d'insight
+  if (data.reason) {
+    Logger.debug(`Pas d'insight: ${data.reason}`);
+  }
+}
+
+// ============================================================================
+// GÉNÉRATION DE RAPPORT
+// ============================================================================
+
+/**
+ * Génère le compte-rendu de la session
+ */
+async function generateReport() {
+  Logger.info('🎯 Génération du compte-rendu');
+  
+  if (!sessionService.hasActiveSession()) {
+    showErrorNotification('Aucune session active. Démarrez un appel d\'abord.');
+    return;
+  }
+  
+  try {
+    // Désactiver le bouton pendant la génération
+    elements.generateReportBtn.disabled = true;
+    
+    // Générer le rapport
+    const report = await reportGenerator.generate(
+      sessionService.getSessionId(),
+      sessionService.getFullTranscript()
+    );
+    
+    // Afficher le rapport
+    await reportGenerator.display(report);
+    
+    // Ajouter des points pour la génération du rapport
+    levelSystem.addPoints(200);
+    
+    // Terminer la session
+    await sessionService.endSession();
+    
+    Logger.info('✅ Compte-rendu généré avec succès');
+    
+  } catch (error) {
+    Logger.error('❌ Erreur lors de la génération du rapport', error);
+    showErrorNotification('Erreur lors de la génération du compte-rendu');
+    
+  } finally {
+    elements.generateReportBtn.disabled = false;
+  }
+}
+
+// ============================================================================
+// GESTION DES ÉVÉNEMENTS
+// ============================================================================
+
+/**
+ * Initialise tous les event listeners
+ */
+function initializeEventListeners() {
+  // Bouton Start/Stop
+  if (elements.startStopBtn) {
+    elements.startStopBtn.addEventListener('click', async () => {
+      if (!isListening) {
+        await startListening();
       } else {
-        content.classList.add("collapsed");
-        button.textContent = "▲";
+        await stopListening();
       }
-    };
+    });
+  }
+  
+  // Bouton Open Window
+  if (elements.openWindowBtn) {
+    elements.openWindowBtn.addEventListener('click', () => {
+      chrome.windows.create({
+        url: chrome.runtime.getURL('src/popup/popup.html'),
+        type: 'popup',
+        width: 450,
+        height: 900,
+        focused: true
+      });
+    });
+  }
+  
+  // Bouton Generate Report
+  if (elements.generateReportBtn) {
+    elements.generateReportBtn.addEventListener('click', generateReport);
+  }
+  
+  // Bouton Reset
+  if (elements.resetBtn) {
+    elements.resetBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      
+      if (confirm('Voulez-vous effacer tous les insights affichés ?')) {
+        insightsManager.clearAllInsights(true);
+      }
+    });
+  }
+  
+  // Bouton Test Permissions (debug)
+  if (elements.testPermissionsBtn) {
+    elements.testPermissionsBtn.addEventListener('click', async () => {
+      Logger.info('🧪 Test des permissions');
+      
+      try {
+        const result = await AudioCaptureService.testPermissions();
+        
+        const message = `
+          ✅ Microphone: ${result.microphone ? 'OK' : 'KO'}
+          ✅ Écran: ${result.screen ? 'OK' : 'KO'}
+          📊 Pistes audio: ${result.audioTracks || 0}
+          ${result.errors.length > 0 ? '\n❌ Erreurs:\n' + result.errors.join('\n') : ''}
+        `;
+        
+        if (elements.debugInfo) {
+          elements.debugInfo.textContent = message;
+        }
+        
+        alert(result.microphone && result.screen ? 
+          '✅ Toutes les permissions fonctionnent !' : 
+          '❌ Certaines permissions sont manquantes'
+        );
+        
+      } catch (error) {
+        Logger.error('❌ Erreur test permissions', error);
+        alert(`❌ Erreur: ${error.message}`);
+      }
+    });
+  }
+  
+  // Gérer la fermeture de la popup
+  window.addEventListener('beforeunload', async () => {
+    if (isListening) {
+      await cleanupAudioResources();
+    }
   });
 }
 
-// ======== DÉMARRER / ARRÊTER L'ÉCOUTE - VERSION OPTIMISÉE macOS ========
-if (startStopBtn) {
-  startStopBtn.onclick = async () => {
-    if (!isListening) {
-      try {
-        // Créer la session
-        const sessionResponse = await fetch("http://localhost:8000/calls/start", { 
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        });
-        
-        if (!sessionResponse.ok) {
-          throw new Error("Impossible de créer la session");
-        }
-        
-        const sessionData = await sessionResponse.json();
-        currentSessionId = sessionData.call_id;
-        conversationTranscript = [];
-        displayedInsights = [];
-        
-        console.log(`\n🚀 SESSION: ${currentSessionId}\n`);
-        
-        // ÉTAPE 1 : Capturer le microphone EN PREMIER (plus fiable sur Mac)
-        console.log("🎤 Demande d'accès au microphone...");
-        try {
-          micStream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              sampleRate: 44100
-            }
-          });
-          console.log("✅ Microphone capturé");
-        } catch (micError) {
-          console.error("❌ Erreur microphone:", micError);
-          throw new Error("Microphone refusé. Vérifiez les permissions système (Préférences → Sécurité → Microphone)");
-        }
-        
-        // ÉTAPE 2 : Capturer l'audio de l'onglet
-        console.log("🖥️ Demande d'accès à l'audio de l'onglet...");
-        try {
-          mediaStream = await navigator.mediaDevices.getDisplayMedia({ 
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              sampleRate: 44100
-            }, 
-            video: true 
-          });
-          console.log("✅ Audio de l'onglet capturé");
-        } catch (displayError) {
-          console.error("❌ Erreur capture écran:", displayError);
-          
-          // Nettoyer le micro si l'écran échoue
-          if (micStream) {
-            micStream.getTracks().forEach(track => track.stop());
-            micStream = null;
-          }
-          
-          throw new Error("Partage d'écran refusé. Assurez-vous de sélectionner 'Partager l'audio de l'onglet'");
-        }
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
 
-        // Vérifier que l'audio est bien présent dans le stream
-        const audioTracks = mediaStream.getAudioTracks();
-        if (audioTracks.length === 0) {
-          throw new Error("Aucune piste audio détectée. Cochez bien 'Partager l'audio' dans la popup");
-        }
-        console.log(`✅ ${audioTracks.length} piste(s) audio détectée(s)`);
-
-        // Créer le contexte audio
-        audioContext = new AudioContext();
-        const sampleRate = audioContext.sampleRate || 44100;
-        bufferThreshold = Math.round(sampleRate * sendIntervalSeconds);
-        
-        const displaySource = audioContext.createMediaStreamSource(mediaStream);
-        const micSource = audioContext.createMediaStreamSource(micStream);
-        const merger = audioContext.createChannelMerger(2);
-        
-        displaySource.connect(merger, 0, 0);
-        micSource.connect(merger, 0, 1);
-        
-        processor = audioContext.createScriptProcessor(4096, 2, 1);
-        merger.connect(processor);
-        processor.connect(audioContext.destination);
-
-        processor.onaudioprocess = (e) => {
-          const channel1 = e.inputBuffer.getChannelData(0);
-          const channel2 = e.inputBuffer.getChannelData(1);
-          
-          if (!audioBuffer.client) audioBuffer.client = [];
-          if (!audioBuffer.commercial) audioBuffer.commercial = [];
-          
-          audioBuffer.client.push(...channel1);
-          audioBuffer.commercial.push(...channel2);
-
-          if (audioBuffer.client.length >= bufferThreshold) {
-            const clientBuffer = new ArrayBuffer(audioBuffer.client.length * 2);
-            const commercialBuffer = new ArrayBuffer(audioBuffer.commercial.length * 2);
-            
-            const clientView = new DataView(clientBuffer);
-            const commercialView = new DataView(commercialBuffer);
-            
-            for (let i = 0; i < audioBuffer.client.length; i++) {
-              clientView.setInt16(i * 2, audioBuffer.client[i] * 0x7fff, true);
-              commercialView.setInt16(i * 2, audioBuffer.commercial[i] * 0x7fff, true);
-            }
-
-            const formData = new FormData();
-            formData.append('client_audio', new Blob([clientBuffer], { type: 'application/octet-stream' }));
-            formData.append('commercial_audio', new Blob([commercialBuffer], { type: 'application/octet-stream' }));
-
-            fetch(`http://localhost:8000/audio/${currentSessionId}`, {
-              method: "POST",
-              body: formData
-            })
-            .then(res => res.json())
-            .then(data => { 
-              if (data.advice) {
-                const validTypes = ["progression", "opportunity", "alert"];
-                
-                if (!validTypes.includes(data.advice.type)) {
-                  console.warn(`[VALIDATION] Type invalide : ${data.advice.type}`);
-                  data.advice.type = "progression";
-                }
-                
-                displayAdvice(data.advice);
-              } else if (data.reason) {
-                console.log(`[SKIP] ${data.reason}`);
-              }
-              
-              if (data.transcription && data.transcription.trim()) {
-                conversationTranscript.push(data.transcription);
-              }
-            })
-            .catch(err => { 
-              console.error("[ERROR]", err);
-            });
-
-            audioBuffer.client = [];
-            audioBuffer.commercial = [];
-          }
-        };
-
-        startStopBtn.classList.remove("btn-start-listening");
-        startStopBtn.classList.add("btn-stop-listening");
-        startStopBtn.textContent = "Stop Listening";
-
-        isListening = true;
-        console.log("✅ Écoute démarrée avec succès");
-
-      } catch (err) {
-        console.error("[ERROR] Capture audio :", err);
-        alert(`❌ ${err.message}`);
-        
-        if (mediaStream) {
-          mediaStream.getTracks().forEach(track => track.stop());
-          mediaStream = null;
-        }
-        if (micStream) {
-          micStream.getTracks().forEach(track => track.stop());
-          micStream = null;
-        }
-        
-        // Fermer la session si elle a été créée
-        if (currentSessionId) {
-          fetch(`http://localhost:8000/calls/${currentSessionId}/end`, {
-            method: "POST"
-          }).catch(() => {});
-          currentSessionId = null;
-        }
-      }
-    } else {
-      // Arrêter l'écoute
-      console.log("🛑 Arrêt de l'écoute...");
-      if (processor) processor.disconnect();
-      if (audioContext) audioContext.close();
-      if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
-      if (micStream) micStream.getTracks().forEach(track => track.stop());
-
-      mediaStream = null;
-      micStream = null;
-      audioContext = processor = null;
-
-      startStopBtn.classList.remove("btn-stop-listening");
-      startStopBtn.classList.add("btn-start-listening");
-      startStopBtn.textContent = "Start Listening";
-
-      isListening = false;
-      console.log("✅ Écoute arrêtée");
-    }
-  };
+/**
+ * Affiche une notification d'erreur
+ * @param {string} message - Message d'erreur
+ */
+function showErrorNotification(message) {
+  // TODO: Implémenter un système de toast/notification
+  alert(`❌ ${message}`);
 }
+
+/**
+ * Affiche une notification de succès
+ * @param {string} message - Message de succès
+ */
+function showSuccessNotification(message) {
+  // TODO: Implémenter un système de toast/notification
+  console.log(`✅ ${message}`);
+}
+
+// ============================================================================
+// INITIALISATION AU CHARGEMENT
+// ============================================================================
+
+/**
+ * Point d'entrée principal de l'application
+ */
+async function main() {
+  try {
+    Logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    Logger.info('🚗 KITT Extension - Démarrage');
+    Logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    // Initialiser l'application
+    await initializeApp();
+    
+    // Initialiser les event listeners
+    initializeEventListeners();
+    
+    Logger.info('✨ Application prête');
+    
+  } catch (error) {
+    Logger.error('💥 Erreur fatale lors de l\'initialisation', error);
+    showErrorNotification('Erreur critique lors du chargement de l\'application');
+  }
+}
+
+// Lancer l'application quand le DOM est prêt
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', main);
+} else {
+  main();
+}
+
+// ============================================================================
+// EXPORTS (pour les tests)
+// ============================================================================
+
+export {
+  startListening,
+  stopListening,
+  generateReport,
+  handleAudioData
+};

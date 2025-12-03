@@ -34,10 +34,6 @@
     "http://localhost:8000/*"
   ],
   
-  "background": {
-    "service_worker": "src/background/background.js"
-  },
-  
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },

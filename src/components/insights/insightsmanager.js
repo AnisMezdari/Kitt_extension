@@ -10,9 +10,9 @@ import {
   THROTTLING_CONFIG, 
   UI_CONFIG,
   VALID_INSIGHT_TYPES 
-} from '../utils/constants.js';
-import { Logger } from '../utils/logger.js';
-import { calculateSimilarity } from '../utils/helpers.js';
+} from '../../utils/constants.js';
+import { Logger } from '../../utils/logger.js';
+import { calculateSimilarity } from '../../utils/helpers.js';
 
 export class InsightsManager {
   constructor(containerElement, emptyStateElement) {

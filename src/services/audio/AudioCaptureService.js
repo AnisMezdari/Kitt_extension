@@ -5,8 +5,8 @@
  * avec gestion d'erreurs spécifiques à chaque plateforme
  */
 
-import { AUDIO_CONFIG, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../utils/constants.js';
-import { Logger } from '../utils/logger.js';
+import { AUDIO_CONFIG, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../utils/constants.js';
+import { Logger } from '../../utils/logger.js';
 
 export class AudioCaptureService {
   constructor() {

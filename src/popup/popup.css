@@ -1,4 +1,10 @@
-/* ==================== RESET ==================== */
+/* 
+============================================================================
+POPUP.CSS - STYLES RESTRUCTURÉS
+============================================================================
+*/
+
+/* ==================== RESET & BASE ==================== */
 * {
   margin: 0;
   padding: 0;
@@ -63,7 +69,7 @@ body {
   transform: translateY(-1px);
 }
 
-/* ==================== SYSTÈME DE NIVEAUX ==================== */
+/* ==================== NIVEAU / GAMIFICATION ==================== */
 .level-card {
   background: linear-gradient(135deg, #2d3142 0%, #252836 100%);
   border-radius: 16px;
@@ -191,19 +197,25 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.insights-header {
+/* ==================== HEADERS SECTIONS ==================== */
+.insights-header,
+.collapsible-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  user-select: none;
 }
 
-.insights-header.collapsible-header {
+.insights-header.collapsible-header,
+.collapsible-header {
   cursor: pointer;
   margin-bottom: 0;
+  transition: all 0.2s ease;
 }
 
-.insights-header.collapsible-header:hover {
+.insights-header.collapsible-header:hover,
+.collapsible-header:hover {
   opacity: 0.9;
 }
 
@@ -211,18 +223,6 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.play-icon {
-  width: 24px;
-  height: 24px;
-  background: transparent;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  color: #E2E8F0;
 }
 
 .chevron-icon {
@@ -254,7 +254,43 @@ body {
   gap: 12px;
 }
 
+/* ==================== SECTIONS PLIABLES ==================== */
+.collapsible-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+  max-height: 1000px;
+  padding: 20px 0 0 0;
+}
+
+.collapsible-content.collapsed {
+  max-height: 0;
+  padding: 0;
+}
+
 /* ==================== BOUTONS ==================== */
+.btn-start-listening {
+  background: linear-gradient(135deg, #48BB78 0%, #38A169 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.btn-start-listening:hover {
+  background: linear-gradient(135deg, #38A169 0%, #2F855A 100%);
+  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-start-listening:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-stop-listening {
   background: linear-gradient(135deg, #E53E3E 0%, #C53030 100%);
   color: white;
@@ -273,22 +309,9 @@ body {
   box-shadow: 0 4px 12px rgba(229, 62, 62, 0.3);
 }
 
-.btn-start-listening {
-  background: linear-gradient(135deg, #48BB78 0%, #38A169 100%);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s ease;
-}
-
-.btn-start-listening:hover {
-  background: linear-gradient(135deg, #38A169 0%, #2F855A 100%);
-  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
-  transform: translateY(-1px);
+.btn-stop-listening:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-reset {
@@ -326,33 +349,27 @@ body {
   transform: translateY(-1px);
 }
 
-/* ==================== POST-CALL SECTIONS ==================== */
-.post-call-card {
+.btn-generate-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-test {
+  background: #4A5568;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 600;
   cursor: pointer;
-}
-
-.collapsible-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  user-select: none;
+  font-size: 13px;
   transition: all 0.2s ease;
+  width: 100%;
+  margin-bottom: 12px;
 }
 
-.collapsible-header:hover {
-  opacity: 0.9;
-}
-
-.collapsible-content {
-  overflow: hidden;
-  transition: max-height 0.3s ease, padding 0.3s ease;
-  max-height: 1000px;
-  padding: 20px;
-}
-
-.collapsible-content.collapsed {
-  max-height: 0;
-  padding: 0 20px;
+.btn-test:hover {
+  background: #5A6578;
 }
 
 /* ==================== INSIGHTS ==================== */
@@ -379,6 +396,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .advice-item {
@@ -392,6 +411,9 @@ body {
   transform: translateY(10px);
   cursor: pointer;
   position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 /* Couleurs selon le type */
@@ -433,19 +455,6 @@ body {
   background: transparent;
 }
 
-.advice-list, 
-.advice-item {
-  width: 100%;
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.advice-text-content {
-  overflow-wrap: break-word;
-  word-break: break-word;
-  min-width: 0;
-}
-
 .advice-icon-image {
   width: 36px;
   height: 36px;
@@ -455,6 +464,8 @@ body {
 .advice-text-content {
   flex: 1;
   min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .advice-compact-title {
@@ -512,7 +523,7 @@ body {
   padding: 40px 20px;
 }
 
-/* ==================== REPORT CONTENT ==================== */
+/* ==================== RAPPORT ==================== */
 .report-content {
   margin-top: 0;
 }
@@ -555,7 +566,7 @@ body {
   }
 }
 
-/* Styles pour les sous-sections du résumé */
+/* Sous-sections du résumé */
 .summary-subsection {
   background: rgba(26, 31, 55, 0.4);
   border-radius: 10px;
@@ -651,6 +662,22 @@ body {
   color: #7c5dfa;
   font-weight: bold;
   font-size: 18px;
+}
+
+/* ==================== DEBUG ==================== */
+.debug-card {
+  border: 2px dashed #F6AD55;
+}
+
+.debug-info {
+  background: rgba(26, 31, 55, 0.6);
+  padding: 12px;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #E2E8F0;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* ==================== RESPONSIVE ==================== */

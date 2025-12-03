@@ -15,8 +15,8 @@ export const AUDIO_CONFIG = {
   // Taille du buffer de traitement
   BUFFER_SIZE: 4096,
   
-  // Intervalle d'envoi au backend (secondes)
-  SEND_INTERVAL_SECONDS: 3,
+  // Intervalle d'envoi au backend (secondes) - AUGMENTÉ POUR ÉVITER LES DOUBLONS
+  SEND_INTERVAL_SECONDS: 4,  // Changé de 3 à 4 secondes
   
   // Contraintes de capture audio
   CAPTURE_CONSTRAINTS: {
