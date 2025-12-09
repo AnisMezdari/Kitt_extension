@@ -15,9 +15,16 @@ export const AUDIO_CONFIG = {
   // Taille du buffer de traitement
   BUFFER_SIZE: 4096,
   
-  // Intervalle d'envoi au backend (secondes) - RÉDUIT pour éviter accumulation
-  SEND_INTERVAL_SECONDS: 2,  // 2 secondes au lieu de 4
-  
+  // Intervalle d'envoi au backend (secondes)
+  // ⚡ OPTIMISÉ POUR TEMPS RÉEL : Réduit de 2s à 1s pour un affichage 50% plus rapide
+  // Plus l'intervalle est court, plus la transcription capture les phrases complètes
+  // Attention : trop court = trop d'appels API Whisper
+  // Recommandations:
+  //   - 0.5-1s: Temps quasi-réel ⚡ OPTIMISÉ
+  //   - 2-3s: Réactif standard
+  //   - 4-5s: Économique mais latence perceptible
+  SEND_INTERVAL_SECONDS: 1,
+
   // Contraintes de capture audio
   CAPTURE_CONSTRAINTS: {
     audio: {
@@ -54,19 +61,19 @@ export const VALID_INSIGHT_TYPES = Object.values(INSIGHT_TYPES);
 export const INSIGHT_VISUAL_CONFIG = {
   [INSIGHT_TYPES.PROGRESSION]: {
     color: '#48BB78',
-    iconPath: 'img/fusée.png',
+    iconPath: 'src/assets/icons/fusée.png',
     label: '🟢 Progression',
     bgColor: 'rgba(72, 187, 120, 0.15)'
   },
   [INSIGHT_TYPES.OPPORTUNITY]: {
     color: '#4299E1',
-    iconPath: 'img/cible.png',
+    iconPath: 'src/assets/icons/cible.png',
     label: '🔵 Opportunité',
     bgColor: 'rgba(66, 153, 225, 0.15)'
   },
   [INSIGHT_TYPES.ALERT]: {
     color: '#F6AD55',
-    iconPath: 'img/cloche.png',
+    iconPath: 'src/assets/icons/cloche.png',
     label: '🟡 Alerte',
     bgColor: 'rgba(246, 173, 85, 0.15)'
   }
@@ -78,10 +85,12 @@ export const INSIGHT_VISUAL_CONFIG = {
 
 export const THROTTLING_CONFIG = {
   // Intervalle minimum entre deux insights (millisecondes)
-  MIN_ADVICE_INTERVAL: 7000,
-  
+  // ⚡ OPTIMISÉ : Réduit de 7s à 3s pour un flux plus rapide
+  MIN_ADVICE_INTERVAL: 3000,
+
   // Intervalle minimum pour le même type d'insight (millisecondes)
-  SAME_TYPE_MIN_INTERVAL: 5000,
+  // ⚡ OPTIMISÉ : Réduit de 5s à 2s
+  SAME_TYPE_MIN_INTERVAL: 2000,
   
   // Seuil de similarité pour la détection de doublons (0-1)
   // Plus le nombre est bas, plus la détection est stricte

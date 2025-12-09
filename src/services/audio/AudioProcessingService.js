@@ -12,7 +12,9 @@ export class AudioProcessingService {
   constructor() {
     this.audioContext = null;
     this.processor = null;
-    this.audioBuffer = { client: [], commercial: [] };
+    // 🆕 DOUBLE BUFFER : un pour l'accumulation, un pour l'envoi
+    this.audioBuffer = { client: [], commercial: [] };  // Buffer actif
+    this.sendingBuffer = { client: [], commercial: [] }; // Buffer en cours d'envoi
     this.isProcessing = false;
     this.sendIntervalSeconds = AUDIO_CONFIG.SEND_INTERVAL_SECONDS;
     this.bufferThreshold = 0;
@@ -101,31 +103,28 @@ export class AudioProcessingService {
       Logger.debug('⏸️ Traitement arrêté, skip buffer');
       return;
     }
-    
+
     if (!this.audioContext || !this.processor) {
       Logger.debug('⏸️ Contexte audio inexistant, skip buffer');
       return;
     }
-    
-    // 🆕 Si on est en train d'envoyer, NE PAS accumuler dans le buffer actuel
-    if (this._isSending) {
-      Logger.debug('⏸️ Envoi en cours, buffer mis en attente');
-      return;
-    }
+
+    // ✅ CORRECTION BUG #1: TOUJOURS accumuler les données, même pendant l'envoi
+    // Le double-buffer permet de ne jamais perdre de données
 
     try {
       // Récupérer les données des deux canaux
       const channel1 = event.inputBuffer.getChannelData(0); // Client (écran)
       const channel2 = event.inputBuffer.getChannelData(1); // Commercial (micro)
 
-      // Ajouter au buffer
+      // Ajouter au buffer actif (toujours, sans condition)
       this.audioBuffer.client.push(...channel1);
       this.audioBuffer.commercial.push(...channel2);
 
       // Vérifier si on a assez de données pour envoyer
       if (this.audioBuffer.client.length >= this.bufferThreshold) {
         Logger.debug(`📊 Seuil atteint: ${this.audioBuffer.client.length} échantillons`);
-        // Empêcher l'envoi multiple pendant qu'on traite
+        // Déclencher l'envoi si pas déjà en cours
         if (!this._isSending) {
           this._sendAudioToBackend();
         }
@@ -146,20 +145,18 @@ export class AudioProcessingService {
       return;
     }
 
-    // Protection temporelle (minimum 1.5 secondes entre envois)
-    const now = Date.now();
-    const timeSinceLastSend = now - this._lastSendTime;
-    if (timeSinceLastSend < 1500 && this._lastSendTime > 0) {
-      Logger.warn(`⚠️ Envoi trop rapide (${timeSinceLastSend}ms), skip`);
-      return;
-    }
+    // ✅ CORRECTION BUG #2: Suppression de la protection temporelle qui conflit avec SEND_INTERVAL_SECONDS
+    // Avec SEND_INTERVAL_SECONDS=2s, on ne devrait jamais être "trop rapide"
 
     // Marquer comme en cours d'envoi
     this._isSending = true;
+    const now = Date.now();
     this._lastSendTime = now;
 
     try {
-      // 🆕 LOG DE LA TAILLE AVANT COPIE
+      // ✅ CORRECTION BUG #3: SWAP des buffers au lieu de copier puis vider
+      // Cela évite toute perte de données et élimine les race conditions
+
       const originalSize = this.audioBuffer.client.length;
       Logger.audio('📤 Envoi de l\'audio au backend', {
         clientSamples: originalSize,
@@ -167,20 +164,17 @@ export class AudioProcessingService {
         durationSeconds: (originalSize / AUDIO_CONFIG.SAMPLE_RATE).toFixed(2)
       });
 
-      // Copier les buffers AVANT de les vider (pour éviter les race conditions)
-      const clientBufferCopy = [...this.audioBuffer.client];
-      const commercialBufferCopy = [...this.audioBuffer.commercial];
+      // SWAP: Le buffer actif devient le buffer d'envoi
+      this.sendingBuffer = this.audioBuffer;
 
-      // Vider les buffers IMMÉDIATEMENT pour éviter les doublons
-      this.audioBuffer.client = [];
-      this.audioBuffer.commercial = [];
-      
-      // 🆕 VÉRIFIER QUE LE VIDAGE A FONCTIONNÉ
-      Logger.debug(`✓ Buffers vidés (client: ${this.audioBuffer.client.length}, commercial: ${this.audioBuffer.commercial.length})`);
+      // Créer de nouveaux buffers vides pour continuer l'accumulation
+      this.audioBuffer = { client: [], commercial: [] };
 
-      // Convertir Float32 → PCM 16-bit
-      const clientBuffer = float32ToPCM16(new Float32Array(clientBufferCopy));
-      const commercialBuffer = float32ToPCM16(new Float32Array(commercialBufferCopy));
+      Logger.debug(`✓ Buffers swappés - Nouveau buffer actif vide, envoi de ${this.sendingBuffer.client.length} échantillons`);
+
+      // Convertir Float32 → PCM 16-bit depuis le buffer d'envoi
+      const clientBuffer = float32ToPCM16(new Float32Array(this.sendingBuffer.client));
+      const commercialBuffer = float32ToPCM16(new Float32Array(this.sendingBuffer.commercial));
 
       // Créer le FormData
       const formData = new FormData();
@@ -241,12 +235,15 @@ export class AudioProcessingService {
 
     } catch (error) {
       Logger.error('❌ Erreur lors de l\'envoi de l\'audio', error);
-      
-      // En cas d'erreur, ne pas restaurer les buffers (éviter les doublons)
-      // Les données sont perdues mais c'est mieux que des doublons
-      
+
+      // ✅ Avec le système de double-buffer, les nouvelles données continuent
+      // à s'accumuler dans audioBuffer pendant l'envoi. En cas d'erreur,
+      // on perd uniquement le chunk qui n'a pas pu être envoyé (sendingBuffer),
+      // mais aucune donnée future n'est perdue.
+
     } finally {
-      // Libérer le flag d'envoi
+      // Vider le buffer d'envoi et libérer le flag
+      this.sendingBuffer = { client: [], commercial: [] };
       this._isSending = false;
     }
   }
@@ -284,9 +281,10 @@ export class AudioProcessingService {
       this.audioContext = null;
     }
 
-    // Vider complètement les buffers
+    // Vider complètement les buffers (les deux)
     this.audioBuffer = { client: [], commercial: [] };
-    
+    this.sendingBuffer = { client: [], commercial: [] };
+
     // Réinitialiser les flags
     this._isSending = false;
     this._lastSendTime = 0;

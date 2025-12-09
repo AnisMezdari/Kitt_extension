@@ -195,6 +195,7 @@ body {
   padding: 20px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-x: hidden; /* Empêche tout débordement horizontal */
 }
 
 /* ==================== HEADERS SECTIONS ==================== */
@@ -257,8 +258,9 @@ body {
 /* ==================== SECTIONS PLIABLES ==================== */
 .collapsible-content {
   overflow: hidden;
+  overflow-x: hidden; /* Force le blocage horizontal */
   transition: max-height 0.3s ease, padding 0.3s ease;
-  max-height: 1000px;
+  max-height: 3000px; /* Augmenté pour permettre l'affichage complet des rapports longs */
   padding: 20px 0 0 0;
 }
 
@@ -377,6 +379,7 @@ body {
   margin-top: 0;
   max-height: 400px;
   overflow-y: auto;
+  overflow-x: hidden; /* Empêche la barre horizontale au hover du dernier insight */
 }
 
 .advice-container::-webkit-scrollbar {
@@ -398,6 +401,7 @@ body {
   gap: 12px;
   width: 100%;
   max-width: 100%;
+  overflow-x: hidden; /* Empêche débordement horizontal des insights */
 }
 
 .advice-item {
@@ -620,7 +624,7 @@ body {
   padding: 16px;
   overflow: visible;
   transition: max-height 0.3s ease, padding 0.3s ease;
-  max-height: none;
+  max-height: 2000px; /* Hauteur suffisante pour permettre l'affichage complet */
 }
 
 .subsection-content.collapsed {
@@ -637,7 +641,6 @@ body {
 
 .summary-list li {
   padding: 10px 12px;
-  padding-left: 28px;
   position: relative;
   font-size: 14px;
   color: #9ca3af;
@@ -655,14 +658,7 @@ body {
   transform: translateX(2px);
 }
 
-.summary-list li:before {
-  content: "•";
-  position: absolute;
-  left: 12px;
-  color: #7c5dfa;
-  font-weight: bold;
-  font-size: 18px;
-}
+/* ✅ Supprimé le :before car les emojis sont déjà dans le contenu HTML */
 
 /* ==================== DEBUG ==================== */
 .debug-card {
