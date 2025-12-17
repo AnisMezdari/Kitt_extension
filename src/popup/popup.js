@@ -18,6 +18,7 @@ import { InsightsManager } from '../components/insights/InsightsManager.js';
 import { ReportGenerator } from '../components/report/ReportGenerator.js';
 import { LevelSystem } from '../components/level/LevelSystem.js';
 import { CollapsibleSection } from '../components/ui/CollapsibleSection.js';
+import { TranscriptionDisplay } from '../components/transcription/TranscriptionDisplay.js';
 
 // Utils
 import { Logger } from '../utils/logger.js';
@@ -40,6 +41,7 @@ let sessionService = null;
 let insightsManager = null;
 let reportGenerator = null;
 let levelSystem = null;
+let transcriptionDisplay = null;  // ✅ Nouveau composant
 
 let isListening = false;
 let isInitializing = false; // 🆕 Protection contre les appels multiples
@@ -62,7 +64,7 @@ function initializeDOMElements() {
     generateReportBtn: document.getElementById('generateReport'),
     resetBtn: document.getElementById('resetBtn'),
     testPermissionsBtn: document.getElementById('testPermissions'),
-    
+
     // Containers - Essayer les deux possibilités d'IDs
     adviceList: adviceList,
     emptyState: emptyState,
@@ -70,7 +72,11 @@ function initializeDOMElements() {
     reportLoading: document.getElementById('reportLoading'),
     reportData: document.getElementById('reportData'),
     reportEmpty: document.getElementById('reportEmpty'),
-    
+
+    // ✅ Transcriptions (nouveau)
+    transcriptionList: document.getElementById('transcriptionList'),
+    transcriptionEmpty: document.getElementById('transcriptionEmpty'),
+
     // Level system
     levelBadge: document.getElementById('levelBadge'),
     levelTitle: document.getElementById('levelTitle'),
@@ -79,7 +85,7 @@ function initializeDOMElements() {
     currentLevelLabel: document.getElementById('currentLevelLabel'),
     progressScore: document.getElementById('progressScore'),
     nextLevelLabel: document.getElementById('nextLevelLabel'),
-    
+
     // Debug
     debugCard: document.getElementById('debugCard'),
     debugInfo: document.getElementById('debugInfo')
@@ -147,8 +153,15 @@ async function initializeApp() {
       elements.adviceList,
       elements.emptyState
     );
-    
+
     Logger.debug('✓ InsightsManager créé avec succès');
+
+    // ✅ Initialiser le composant de transcription
+    transcriptionDisplay = new TranscriptionDisplay(
+      elements.transcriptionList
+    );
+
+    Logger.debug('✓ TranscriptionDisplay créé avec succès');
     
     reportGenerator = new ReportGenerator(
       elements.reportData,
@@ -391,9 +404,21 @@ function handleAudioData(data) {
     }
   }
   
-  // Enregistrer la transcription si présente
+  // ✅ Afficher et enregistrer la transcription si présente
   if (data.transcription && data.transcription.trim()) {
-    Logger.debug('📝 Transcription ajoutée');
+    Logger.debug('📝 Transcription reçue');
+
+    // Afficher dans l'UI
+    if (transcriptionDisplay) {
+      transcriptionDisplay.addTranscription(data.transcription);
+
+      // Masquer l'état vide si on a des transcriptions
+      if (elements.transcriptionEmpty && transcriptionDisplay.getCount() > 0) {
+        elements.transcriptionEmpty.style.display = 'none';
+      }
+    }
+
+    // Enregistrer dans la session
     sessionService.addTranscript(data.transcription);
   }
 }

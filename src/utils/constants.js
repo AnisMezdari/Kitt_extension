@@ -16,14 +16,15 @@ export const AUDIO_CONFIG = {
   BUFFER_SIZE: 4096,
   
   // Intervalle d'envoi au backend (secondes)
-  // ⚡ OPTIMISÉ POUR TEMPS RÉEL : Réduit de 2s à 1s pour un affichage 50% plus rapide
-  // Plus l'intervalle est court, plus la transcription capture les phrases complètes
-  // Attention : trop court = trop d'appels API Whisper
-  // Recommandations:
-  //   - 0.5-1s: Temps quasi-réel ⚡ OPTIMISÉ
-  //   - 2-3s: Réactif standard
-  //   - 4-5s: Économique mais latence perceptible
-  SEND_INTERVAL_SECONDS: 1,
+  // ⚠️ NOTE: Ce paramètre est utilisé uniquement si VAD_ENABLED = false
+  // Avec VAD activé, l'envoi se fait automatiquement à la fin de chaque phrase
+  SEND_INTERVAL_SECONDS: 5,
+
+  // ✅ NOUVEAU: Voice Activity Detection (VAD)
+  // Active l'envoi intelligent basé sur la détection de fin de phrase
+  // - true (recommandé): Envoie uniquement quand le commercial/client finit de parler
+  // - false: Envoie toutes les SEND_INTERVAL_SECONDS (mode legacy)
+  VAD_ENABLED: true,
 
   // Contraintes de capture audio
   CAPTURE_CONSTRAINTS: {
@@ -58,24 +59,28 @@ export const INSIGHT_TYPES = {
 export const VALID_INSIGHT_TYPES = Object.values(INSIGHT_TYPES);
 
 // Configuration visuelle des types d'insights
+// ✅ HARMONISÉ avec backend : Ajout des émojis utilisés côté backend pour cohérence
 export const INSIGHT_VISUAL_CONFIG = {
   [INSIGHT_TYPES.PROGRESSION]: {
-    color: '#48BB78',
+    color: '#48BB78',        // Vert
     iconPath: 'src/assets/icons/fusée.png',
     label: '🟢 Progression',
+    emoji: '🟢',             // Émoji backend
     bgColor: 'rgba(72, 187, 120, 0.15)'
   },
   [INSIGHT_TYPES.OPPORTUNITY]: {
-    color: '#4299E1',
+    color: '#4299E1',        // Bleu
     iconPath: 'src/assets/icons/cible.png',
     label: '🔵 Opportunité',
+    emoji: '🔵',             // Émoji backend
     bgColor: 'rgba(66, 153, 225, 0.15)'
   },
   [INSIGHT_TYPES.ALERT]: {
-    color: '#F6AD55',
+    color: '#ED8936',        // ✅ CORRIGÉ: Rouge/Orange au lieu de orange clair pour cohérence avec 🔴
     iconPath: 'src/assets/icons/cloche.png',
-    label: '🟡 Alerte',
-    bgColor: 'rgba(246, 173, 85, 0.15)'
+    label: '🔴 Alerte',      // ✅ CORRIGÉ: 🔴 au lieu de 🟡 pour cohérence backend
+    emoji: '🔴',             // Émoji backend
+    bgColor: 'rgba(237, 137, 54, 0.15)'
   }
 };
 
@@ -254,7 +259,7 @@ export const VALIDATION_RULES = {
   
   // Buffer audio
   MIN_BUFFER_SIZE: 100,
-  MAX_BUFFER_SIZE: 1000000
+  MAX_BUFFER_SIZE: 441000  // ✅ CORRIGÉ: 10 secondes à 44100 Hz (réduit de 1000000 pour cohérence)
 };
 
 // ============================================================================

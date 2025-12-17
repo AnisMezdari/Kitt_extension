@@ -4,15 +4,16 @@
  * Gère l'affichage, le cache et la validation des insights en temps réel
  */
 
-import { 
-  INSIGHT_TYPES, 
-  INSIGHT_VISUAL_CONFIG, 
-  THROTTLING_CONFIG, 
+import {
+  INSIGHT_TYPES,
+  INSIGHT_VISUAL_CONFIG,
   UI_CONFIG,
-  VALID_INSIGHT_TYPES 
+  VALID_INSIGHT_TYPES
 } from '../../utils/constants.js';
 import { Logger } from '../../utils/logger.js';
-import { calculateSimilarity } from '../../utils/helpers.js';
+// ✅ CORRECTION: Imports supprimés car non utilisés après optimisation
+// - THROTTLING_CONFIG: Le backend gère le throttling
+// - calculateSimilarity: La détection de doublons est côté backend
 
 export class InsightsManager {
   constructor(containerElement, emptyStateElement) {
@@ -43,33 +44,24 @@ export class InsightsManager {
    */
   displayInsight(advice) {
     Logger.info('🎯 InsightsManager.displayInsight appelé', advice);
-    
+
     const now = Date.now();
 
-    // Validation de la structure
+    // Validation de la structure (seule validation côté client)
     if (!this._validateInsightStructure(advice)) {
       Logger.warn('⚠️ Structure d\'insight invalide', advice);
       return false;
     }
 
-    // Vérification throttling global
-    if (!this._checkGlobalThrottling(now)) {
-      return false;
-    }
+    // ✅ CORRECTION: Suppression des validations redondantes
+    // Le backend gère déjà :
+    // - Throttling/Cooldown (10-25s selon pertinence)
+    // - Détection sémantique de doublons (embeddings + cosine similarity)
+    // - Validation de la pertinence (score 0-100)
+    // Ces vérifications côté client étaient inutiles et incohérentes
 
-    // Vérification doublon
-    if (this._isDuplicate(advice)) {
-      Logger.info('[BLOCKED] Insight trop similaire détecté');
-      return false;
-    }
-
-    // Vérification throttling par type
-    if (!this._checkTypeThrottling(advice.type, now)) {
-      return false;
-    }
-
-    // Toutes les validations passées, afficher l'insight
-    Logger.info('✅ Toutes les validations passées, affichage de l\'insight');
+    // Afficher l'insight directement
+    Logger.info('✅ Validation passée, affichage de l\'insight');
     this._renderInsight(advice, now);
     this.lastAdviceTime = now;
 
@@ -109,80 +101,23 @@ export class InsightsManager {
     return true;
   }
 
-  /**
-   * Vérifie le throttling global
-   * @private
-   */
-  _checkGlobalThrottling(now) {
-    const timeSinceLastAdvice = now - this.lastAdviceTime;
-    
-    if (timeSinceLastAdvice < THROTTLING_CONFIG.MIN_ADVICE_INTERVAL) {
-      Logger.info(
-        `[THROTTLE] Trop tôt (${(timeSinceLastAdvice / 1000).toFixed(1)}s < ${THROTTLING_CONFIG.MIN_ADVICE_INTERVAL / 1000}s)`
-      );
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * Vérifie si l'insight est un doublon
-   * @private
-   */
-  _isDuplicate(newInsight) {
-    const newText = `${newInsight.title} ${newInsight.details.description}`.toLowerCase();
-    
-    // Comparer avec les N derniers insights
-    const recentInsights = this.displayedInsights.slice(
-      -THROTTLING_CONFIG.RECENT_INSIGHTS_COMPARE_COUNT
-    );
-    
-    for (const oldInsight of recentInsights) {
-      const oldText = `${oldInsight.title} ${oldInsight.details.description}`.toLowerCase();
-      
-      const similarity = calculateSimilarity(newText, oldText);
-      
-      if (similarity > THROTTLING_CONFIG.SIMILARITY_THRESHOLD) {
-        Logger.debug(`Similarité détectée: ${(similarity * 100).toFixed(1)}%`);
-        return true;
-      }
-    }
-    
-    return false;
-  }
-
-  /**
-   * Vérifie le throttling par type
-   * @private
-   */
-  _checkTypeThrottling(type, now) {
-    const recentElements = this.container.querySelectorAll('.advice-item');
-    
-    for (const item of recentElements) {
-      const itemType = item.getAttribute('data-type');
-      const itemTimestamp = parseInt(item.getAttribute('data-timestamp') || '0');
-      
-      if (itemType === type && (now - itemTimestamp) < THROTTLING_CONFIG.SAME_TYPE_MIN_INTERVAL) {
-        Logger.info(
-          `[BLOCKED] Même type "${type}" détecté il y a ${((now - itemTimestamp) / 1000).toFixed(1)}s`
-        );
-        return false;
-      }
-    }
-    
-    return true;
-  }
+  // ✅ MÉTHODES SUPPRIMÉES: _checkGlobalThrottling, _isDuplicate, _checkTypeThrottling
+  // Ces validations étaient redondantes avec le backend qui gère déjà:
+  // - Cooldowns adaptatifs (10-25s selon score de pertinence)
+  // - Détection sémantique de doublons avec sentence-transformers
+  // - Scoring de pertinence multi-facteurs (0-100)
+  // La suppression de ces méthodes améliore les performances et élimine les incohérences
 
   /**
    * Rend l'insight dans le DOM
    * @private
    */
   _renderInsight(advice, timestamp) {
-    // Ajouter au cache
+    // Ajouter au cache (max 10 insights, aligné avec le backend)
+    const MAX_CACHED_INSIGHTS = 10;
     this.displayedInsights.push(advice);
-    if (this.displayedInsights.length > THROTTLING_CONFIG.MAX_CACHED_INSIGHTS) {
-      this.displayedInsights = this.displayedInsights.slice(-THROTTLING_CONFIG.MAX_CACHED_INSIGHTS);
+    if (this.displayedInsights.length > MAX_CACHED_INSIGHTS) {
+      this.displayedInsights = this.displayedInsights.slice(-MAX_CACHED_INSIGHTS);
     }
 
     // Retirer la classe "new-insight" des anciens

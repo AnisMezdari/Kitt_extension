@@ -691,10 +691,152 @@ body {
     flex-wrap: wrap;
     gap: 12px;
   }
-  
+
   .btn-stop-listening,
   .btn-start-listening {
     font-size: 12px;
     padding: 6px 12px;
   }
+}
+
+/* ==================== TRANSCRIPTIONS (NOUVEAU) ==================== */
+.transcription-card {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.transcription-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+
+.transcription-container {
+  position: relative;
+  min-height: 60px;
+}
+
+.transcription-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* Scrollbar pour transcriptions */
+.transcription-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.transcription-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.transcription-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.transcription-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Message de transcription */
+.transcription-message {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 12px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  border-left: 3px solid transparent;
+}
+
+.transcription-message.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Client (bleu) */
+.transcription-message.transcription-client {
+  border-left-color: #4299E1;
+}
+
+.transcription-message.transcription-client .transcription-header {
+  color: #4299E1;
+}
+
+/* Commercial (vert) */
+.transcription-message.transcription-commercial {
+  border-left-color: #48BB78;
+}
+
+.transcription-message.transcription-commercial .transcription-header {
+  color: #48BB78;
+}
+
+/* Header du message */
+.transcription-header.client-message,
+.transcription-header.commercial-message,
+.transcription-header.unknown-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.transcription-icon {
+  font-size: 16px;
+}
+
+.transcription-speaker {
+  flex: 1;
+}
+
+.transcription-time {
+  font-size: 11px;
+  opacity: 0.6;
+  font-weight: 400;
+}
+
+/* Contenu du message */
+.transcription-content {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #e8eaed;
+  word-wrap: break-word;
+}
+
+/* État vide */
+#transcriptionEmpty {
+  text-align: center;
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+/* Animation d'apparition */
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.transcription-message.new {
+  animation: slideInFromBottom 0.4s ease-out;
 }
